@@ -1,0 +1,11 @@
+Bundle-Name: Ha-VIS Util Platform
+Bundle-SymbolicName: havis.util.platform
+Bundle-Version: 2.6.0
+Implementation-Version: 2.6
+Bundle-ManifestVersion: 2
+Bundle-Vendor: HARTING IT_SD
+Bundle-Activator: havis.util.platform.osgi.Activator
+Import-Package: 
+ org.osgi.framework
+Export-Package: 
+ havis.util.platform

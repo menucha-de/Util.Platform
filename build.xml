@@ -1,0 +1,212 @@
+<?xml version="1.0"?>
+<project name="havis.util.platform" default="publish" xmlns:ivy="antlib:org.apache.ivy.ant" xmlns:if="ant:if">
+	<!-- Eclipse configuration:
+           Java Build Path -> Source -> src/main/java
+                                     -> src/main/resources/classpath
+                                     -> src/test/java -> Output folder: Platform/target/test/classes
+                                     -> src/test/resources/classpath -> Output folder: Platform/target/test/classes
+                                     -> Allow output folders for source folders
+                                     -> Default output folder: Platform/target/classes
+                           -> Libraries -> all libraries from directory "lib"
+           TestNG plugin:
+             TestNG -> Output directory: /target/test/reports
+    -->
+
+	<property file="${basedir}/build.properties" />
+	<property name="basename" value="${ant.project.name}" />
+	<property name="build.dir" location="${basedir}/target" />
+	<property name="build.dir.classes" location="${build.dir}/classes" />
+	<property name="doc.dir" location="${build.dir}/doc" />
+	<property name="lib.dir" location="${basedir}/lib" />
+	<property name="src.main.dir" location="${basedir}/src/main/java" />
+	<property name="src.test.dir" location="${basedir}/src/test/java" />
+	<property name="resources.dir" location="${basedir}/src/main/resources" />
+	<property name="resources.dir.classpath" location="${resources.dir}/classpath" />
+
+	<property file="${resources.dir}/build.properties" />
+	<property file="${resources.dir}/MANIFEST.MF" prefix="manifest" />
+
+	<property name="build.dir.test" location="${build.dir}/test" />
+	<property name="build.dir.test.classes" location="${build.dir.test}/classes" />
+
+	<property name="resources.dir.test.classpath" location="${basedir}/src/test/resources/classpath" />
+
+	<property name="jmockit.coverage.exclude" value="havis\.util\.service\.manager\**/*Test*" />
+	<property name="jmockit.coverage.outputDir" location="${build.dir.test}/coverage-report" />
+
+	<property name="c.src.dir" location="${basedir}/src/main/c" />
+	<property name="c.build.dir" location="${build.dir}/c" />
+	<property name="c.manifest.file" location="${c.build.dir}/MANIFEST.MF" />
+
+	<property file="${resources.dir}/MANIFEST.MF" prefix="manifest" />
+	<property file="${resources.dir}/build.properties" />
+
+	<property name="javac.version" value="8" />
+
+	<path id="build.classpath">
+		<fileset dir="${lib.dir}" />
+	</path>
+
+	<target name="check.build.properties">
+		<condition property="ivy.resolver" else="local">
+			<isset property="ivy.resolver" />
+		</condition>
+		<fail message="Missing property 'api.url'. Does 'build.properties' file exists?" unless="api.url" />
+		<fail message="Missing property 'ivy.url'. Does 'build.properties' file exists?" unless="ivy.url" />
+
+		<condition property="arch" value="amd64">
+			<matches pattern="^linux-amd64$" string="${platform}" />
+		</condition>
+
+		<condition property="processor" value="amd64">
+			<matches pattern="^linux-amd64$" string="${platform}" />
+		</condition>
+
+		<condition property="arch" value="armhf">
+			<matches pattern="^linux-arm$" string="${platform}" />
+		</condition>
+
+		<condition property="processor" value="arm">
+			<matches pattern="^linux-arm$" string="${platform}" />
+		</condition>
+
+		<condition property="platform" value="all">
+			<not>
+				<isset property="platform" />
+			</not>
+		</condition>
+
+		<condition property="default" value="true">
+			<matches pattern="^all$" string="${platform}" />
+		</condition>
+
+		<condition property="cc" value="gcc" else="arm-linux-gnueabihf-gcc">
+			<matches pattern="^amd64$" string="${arch}" />
+		</condition>
+
+		<property name="java_home" value="/usr/lib/jvm/default-java" />
+		<!--
+		<exec executable="/bin/bash" outputproperty="java_home">
+			<arg value="-c" />
+			<arg value="ls -dvr /usr/lib/jvm/*${arch} 2> /dev/null | head -n1" />
+		</exec>
+		<fail message="Failed to detect Java home directory at '/usr/lib/jvm/*${arch}'!">
+			<condition>
+				<equals arg1="${java_home}" arg2=""/>
+			</condition>
+		</fail>
+		-->
+	</target>
+
+	<target name="clean-cache" description="Cleans the ivy cache">
+		<ivy:cleancache />
+	</target>
+
+	<target name="clean" description="Cleans the project">
+		<delete dir="${build.dir}" />
+		<delete dir="${lib.dir}" />
+	</target>
+
+	<target name="clean-all" depends="clean, clean-cache" description="Cleans the project and ivy cache" />
+
+	<target name="retrieve" depends="check.build.properties">
+		<ivy:retrieve log="quiet" />
+	</target>
+
+	<!-- Compiles the java source files -->
+	<target name="compile" depends="retrieve">
+		<mkdir dir="${build.dir.classes}" />
+		<mkdir dir="${build.dir}/include" />
+		<javac srcdir="${src.main.dir}" destdir="${build.dir.classes}" release="${javac.version}" debug="${javac.debug}" includeantruntime="false" nativeheaderdir="${build.dir}/include">
+			<classpath>
+				<!-- build libraries -->
+				<path refid="build.classpath" />
+			</classpath>
+		</javac>
+	</target>
+
+	<!-- Checks if the native linux module is up to date -->
+	<target name="check.linux">
+		<uptodate property="uptodate.linux" targetfile="${build.dir.classes}/liblinuxplatform.so">
+			<srcfiles dir="${src.main.dir}" includes="**/LinuxPlatform.java" />
+		</uptodate>
+	</target>
+
+	<!-- Compiles the native module for Linux -->
+	<target name="linux" depends="check.linux, compile" if="arch" unless="uptodate.linux">
+		<echo message="Creating native linux module ${build.dir.classes}/liblinuxplatform.so" level="info" />
+		<mkdir dir="${build.dir.classes}" />
+		<exec executable="make" failonerror="true">
+			<env key="CC" value="${cc}" />
+			<env key="ARCH" value="${arch}" />
+			<env key="JAVA_HOME" value="${java_home}" />
+			<arg line="clean all" />
+		</exec>
+	</target>
+
+	<!-- Packages the classes into a JAR file -->
+	<target name="jar" depends="linux" description="Creates the binary JAR">
+		<copy file="${resources.dir.classpath}/bundle.properties" todir="${build.dir.classes}" overwrite="true" />
+		<replace file="${build.dir.classes}/bundle.properties" token="osname=linux" value="osname=default" if:set="default" />
+		<!-- create binary JAR -->
+		<jar jarfile="${build.dir}/${basename}-${platform}.jar" manifest="${resources.dir}/MANIFEST.MF">
+			<manifest if:set="processor">
+				<attribute name="Bundle-NativeCode" value="liblinuxplatform.so;osname=linux;processor=${processor}" />
+			</manifest>
+			<fileset dir="${build.dir.classes}" />
+			<fileset dir="${resources.dir.classpath}" excludes="bundle.properties" />
+		</jar>
+	</target>
+
+	<target name="jar-doc">
+		<javadoc destdir="${doc.dir}" author="true" version="true" use="true" windowtitle="${javadoc.windowtitle}" doctitle="${javadoc.doctitle}" bottom="${javadoc.buttom}">
+			<packageset dir="${src.main.dir}" defaultexcludes="yes" />
+			<classpath refid="build.classpath" />
+			<group title="Packages" packages="${basename}.*" />
+			<link offline="true" href="http://docs.oracle.com/javase/7/docs/api/" packagelistURL="${api.url}/javase/7/" />
+		</javadoc>
+		<jar jarfile="${build.dir}/${basename}-javadoc.jar" basedir="${doc.dir}" />
+	</target>
+
+	<target name="jar-src" depends="compile" description="Creates the source JAR">
+		<!-- create source JAR -->
+		<jar jarfile="${build.dir}/${basename}-sources.jar" basedir="${src.main.dir}" />
+	</target>
+
+	<target name="publish" depends="jar, jar-doc, jar-src">
+		<ivy:resolve file="${resources.dir}/ivy.xml" />
+
+		<ivy:publish resolver="${ivy.resolver}" pubrevision="${manifest.Bundle-Version}" status="integration" overwrite="true">
+			<artifacts pattern="${build.dir}/[artifact].[ext]" />
+		</ivy:publish>
+	</target>
+
+	<target name="prepare" depends="linux" unless="${skip.test}">
+		<mkdir dir="${build.dir.test.classes}" />
+		<javac srcdir="${src.test.dir}" destdir="${build.dir.test.classes}" release="${javac.version}" debug="${javac.debug}" includeantruntime="false">
+			<classpath>
+				<path refid="build.classpath" />
+				<path location="${build.dir.classes}" />
+			</classpath>
+		</javac>
+	</target>
+
+	<target name="test" depends="prepare" unless="${skip.test}">
+		<junit printsummary="true" fork="yes" haltonerror="yes" haltonfailure="yes">
+			<jvmarg value="-Djmockit-coverage-excludes=${jmockit.coverage.exclude}" />
+			<jvmarg value="-Djmockit-coverage-outputDir=${jmockit.coverage.outputDir}" />
+			<jvmarg value="-Djava.library.path=${build.dir.classes}" />
+			<classpath>
+				<path refid="build.classpath" />
+				<pathelement location="${build.dir.classes}" />
+				<pathelement location="${build.dir.test.classes}" />
+				<pathelement location="${resources.dir.test.classpath}" />
+			</classpath>
+			<formatter type="plain" />
+			<test name="havis.util.platform.TestSuite" todir="${build.dir.test}" />
+		</junit>
+
+		<zip zipfile="${build.dir}/${basename}-test.zip" basedir="${build.dir.test}" excludes="classes/**" />
+	</target>
+
+</project>

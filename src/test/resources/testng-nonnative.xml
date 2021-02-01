@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<suite name="Test Suite - Non Native">
+	<test name="Test">
+		<groups>
+			<run>
+				<exclude name="native-linux" />
+			</run>
+		</groups>
+		<packages>
+			<package name="havis.systemcontroller.impl" />
+			<package name="havis.systemcontroller.osgi" />
+		</packages>
+	</test>
+</suite>

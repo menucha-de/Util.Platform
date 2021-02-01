@@ -1,0 +1,19 @@
+<configuration>
+	<appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+		<encoder>
+			<pattern>%date [%thread] %level %logger{15} - %message%n</pattern>
+		</encoder>
+	</appender>
+
+	<!-- info: loading of property file and native libraries -->
+	<logger name="havis.util.platform" level="warn" />
+
+	<root level="warn">
+		<appender-ref ref="STDOUT" />
+	</root>
+</configuration>
+
+
+
+
+
